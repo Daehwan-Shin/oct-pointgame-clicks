@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Hover Click Component</title>
+    <!-- 안정적인 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@streamlit/component-lib@1.5.0/dist/index.js"></script>
+    <style>
+      .wrap { position: relative; display: inline-block; }
+      .img  { display: block; width: 100%; height: auto; cursor: crosshair; }
+      .ov   { position: absolute; left: 0; top: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      const Streamlit = window.streamlitComponentLib.Streamlit;
+
+      let imgEl, canvas, ctx, radius=40, fillRGBA, strokeRGBA, strokePX;
+      let desiredWidth = null;
+
+      function mount(args) {
+        const root = document.getElementById("root");
+        root.innerHTML = "";
+
+        const b64 = args.image_b64;
+        radius       = args.radius      || 40;
+        fillRGBA     = args.fill_rgba   || "rgba(255,215,0,0.2)";
+        strokeRGBA   = args.stroke_rgba || "rgba(255,215,0,1)";
+        strokePX     = args.stroke_px   || 2;
+        desiredWidth = args.width       || null;
+
+        const wrap = document.createElement("div");
+        wrap.className = "wrap";
+
+        imgEl = document.createElement("img");
+        imgEl.className = "img";
+        imgEl.src = "data:image/png;base64," + b64;
+        if (desiredWidth) imgEl.style.width = desiredWidth + "px";
+
+        canvas = document.createElement("canvas");
+        canvas.className = "ov";
+
+        wrap.appendChild(imgEl);
+        wrap.appendChild(canvas);
+        root.appendChild(wrap);
+
+        imgEl.addEventListener("load", fit);
+        window.addEventListener("resize", fit);
+
+        imgEl.addEventListener("mousemove", onMove);
+        imgEl.addEventListener("mouseleave", clearOverlay);
+        imgEl.addEventListener("click", onClick);
+
+        // Streamlit에 높이 알려주기
+        setTimeout(() => {
+          const rect = imgEl.getBoundingClientRect();
+          Streamlit.setFrameHeight(rect.height + 8);
+        }, 100);
+      }
+
+      function fit() {
+        const rect = imgEl.getBoundingClientRect();
+        canvas.width  = Math.round(rect.width);
+        canvas.height = Math.round(rect.height);
+        ctx = canvas.getContext("2d");
+        clearOverlay();
+        Streamlit.setFrameHeight(rect.height + 8);
+      }
+
+      function clearOverlay() {
+        if (!ctx) return;
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+      }
+
+      function onMove(e) {
+        if (!ctx) return;
+        const rect = imgEl.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, 2*Math.PI);
+        ctx.fillStyle = fillRGBA;
+        ctx.strokeStyle = strokeRGBA;
+        ctx.lineWidth = strokePX;
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      function onClick(e) {
+        const rect = imgEl.getBoundingClientRect();
+        const x = Math.round(e.clientX - rect.left);
+        const y = Math.round(e.clientY - rect.top);
+        Streamlit.setComponentValue({
+          x: x,
+          y: y,
+          displayed_width:  Math.round(rect.width),
+          displayed_height: Math.round(rect.height),
+        });
+      }
+
+      function onRender(event) {
+        const { args } = event.detail;
+        mount(args);
+      }
+
+      // ✅ 이 두 줄이 반드시 있어야 함
+      Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+      Streamlit.setComponentReady();
+      Streamlit.onRender(onRender);
+    </script>
+  </body>
+</html>

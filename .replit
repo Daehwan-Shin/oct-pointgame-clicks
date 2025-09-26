@@ -1,4 +1,4 @@
-run = "streamlit run save_clicks_streamlit.py --server.port 3000 --server.address 0.0.0.0"
+run = "python -m streamlit run save_clicks_streamlit.py --server.address 0.0.0.0 --server.port $PORT"
 modules = ["python-3.11"]
 
 [nix]
@@ -15,15 +15,15 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "OCT Click Collector"
+args = "Image Click Test"
 
 [[workflows.workflow]]
-name = "OCT Click Collector"
+name = "Image Click Test"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "streamlit run save_clicks_streamlit.py --server.port 5000 --server.address 0.0.0.0"
+args = "streamlit run simple_test.py --server.port 5000 --server.address 0.0.0.0 --server.headless true"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -32,10 +32,6 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 41983
-externalPort = 3000
 
 [agent]
 expertMode = true
