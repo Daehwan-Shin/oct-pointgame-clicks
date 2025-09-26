@@ -4,5 +4,3 @@ pandas
 streamlit-image-coordinates==0.1.6
 pandas
 pillow
-streamlit==1.29.0
-streamlit-image-coordinates==0.1.6
