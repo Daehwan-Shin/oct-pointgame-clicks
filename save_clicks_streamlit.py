@@ -1,114 +1,39 @@
-# save_clicks_streamlit.py
-import os, glob, io, base64
+import os, glob, io
 import streamlit as st
 import pandas as pd
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
-import streamlit.components.v1 as components
 
 # ------------------------
 # 설정
 # ------------------------
-IMG_DIR = "test"      # pointgame_project/test (CNV, DME, DRUSEN, NORMAL)
+IMG_DIR = "test"
 OUT_DIR = "clicks"
 os.makedirs(OUT_DIR, exist_ok=True)
-
-# ------------------------
-# 유틸: 호버 오버레이(노란 원) 렌더링
-# ------------------------
-def render_hover_overlay(pil_image, r_px=40, disp_w=None,
-                         fill_rgba="rgba(255,215,0,0.2)", stroke_rgba="rgba(255,215,0,1)", stroke_px=2):
-    """
-    이미지 위에 마우스 호버 위치에 반투명 원을 실시간으로 그려주는 캔버스.
-    클릭 이벤트는 처리하지 않음(아래 streamlit_image_coordinates가 담당).
-    """
-    w, h = pil_image.size
-    if disp_w is None:
-        disp_w = min(w, 900)
-    disp_h = int(h * (disp_w / float(w)))
-
-    buf = io.BytesIO()
-    pil_image.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-
-    html = f"""
-    <div id="hover-wrap" style="position:relative; display:inline-block;">
-      <img id="bg" src="data:image/png;base64,{b64}" style="display:block; width:{disp_w}px; height:auto;"/>
-      <canvas id="overlay" style="position:absolute; left:0; top:0; pointer-events:none;"></canvas>
-    </div>
-    <script>
-      const img = document.getElementById("bg");
-      const canvas = document.getElementById("overlay");
-      const ctx = canvas.getContext("2d");
-
-      function fit() {{
-        const rect = img.getBoundingClientRect();
-        canvas.width = Math.round(rect.width);
-        canvas.height = Math.round(rect.height);
-        canvas.style.width = rect.width + "px";
-        canvas.style.height = rect.height + "px";
-        canvas.style.left = "0px";
-        canvas.style.top = "0px";
-      }}
-      window.addEventListener("resize", fit);
-      img.addEventListener("load", fit);
-      fit();
-
-      img.addEventListener("mousemove", (e) => {{
-        const rect = img.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        ctx.beginPath();
-        ctx.arc(x, y, {r_px}, 0, 2*Math.PI);
-        ctx.fillStyle = "{fill_rgba}";
-        ctx.strokeStyle = "{stroke_rgba}";
-        ctx.lineWidth = {stroke_px};
-        ctx.fill();
-        ctx.stroke();
-      }});
-
-      img.addEventListener("mouseleave", () => {{
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-      }});
-    </script>
-    """
-    components.html(html, height=min(900, disp_h + 10), scrolling=False)
-    return disp_w  # 아래 클릭 위젯에도 동일 폭을 주기 위함
 
 # ------------------------
 # 평가자 선택 (사이드바)
 # ------------------------
 DOCTORS = ["Dr. Nam", "Dr. Shin"]
-
-# Streamlit 버전별 쿼리 파라미터 처리
+qp = getattr(st, "query_params", {})
 pref = None
-qp = getattr(st, "query_params", None)
 if isinstance(qp, dict):
     pref = qp.get("user", None)
-    if isinstance(pref, list):
-        pref = pref[0]
-else:
-    try:
-        qp = st.experimental_get_query_params()
-        pref = qp.get("user", [None])[0]
-    except Exception:
-        pref = None
-
+if pref and isinstance(pref, list):
+    pref = pref[0]
 pref_label = None
 if pref:
-    p = str(pref).lower()
-    if p in ["nam","drnam","doctor1","dr.nam"]:
+    if str(pref).lower() in ["nam","drnam","doctor1","dr.nam"]:
         pref_label = "Dr. Nam"
-    elif p in ["shin","drshin","doctor2","dr.shin"]:
+    elif str(pref).lower() in ["shin","drshin","doctor2","dr.shin"]:
         pref_label = "Dr. Shin"
 
 with st.sidebar:
     st.header("Rater")
-    rater = st.selectbox("Choose evaluator", DOCTORS,
-                         index=(DOCTORS.index(pref_label) if pref_label in DOCTORS else 0))
+    rater = st.selectbox("Choose evaluator", DOCTORS, index=(DOCTORS.index(pref_label) if pref_label in DOCTORS else 0))
     st.caption("선택한 평가자에 따라 별도 CSV로 저장됩니다.")
 
+# 파일명용 키/경로
 rater_key = "nam" if rater == "Dr. Nam" else "shin"
 csv_path = os.path.join(OUT_DIR, f"clicks_{rater_key}.csv")
 
@@ -130,7 +55,7 @@ if "df" not in st.session_state:
     if os.path.exists(csv_path):
         st.session_state.df = pd.read_csv(csv_path)
     else:
-        st.session_state.df = pd.DataFrame(columns=["name","click_y","click_x"])
+        st.session_state.df = pd.DataFrame({"name": [], "click_y": [], "click_x": []})
 if "done_set" not in st.session_state:
     st.session_state.done_set = set(st.session_state.df["name"].astype(str).tolist())
 if "idx" not in st.session_state:
@@ -144,47 +69,44 @@ def current_name():
     return names_all[st.session_state.idx]
 
 def move_next():
-    for j in range(st.session_state.idx + 1, len(names_all)):
+    for j in range(st.session_state.idx+1, len(names_all)):
         if names_all[j] not in st.session_state.done_set:
             st.session_state.idx = j; return
-    st.session_state.idx = min(st.session_state.idx + 1, len(names_all) - 1)
+    st.session_state.idx = min(st.session_state.idx+1, len(names_all)-1)
 
 def move_prev():
-    for j in range(st.session_state.idx - 1, -1, -1):
+    for j in range(st.session_state.idx-1, -1, -1):
         if names_all[j] not in st.session_state.done_set:
             st.session_state.idx = j; return
-    st.session_state.idx = max(st.session_state.idx - 1, 0)
+    st.session_state.idx = max(st.session_state.idx-1, 0)
 
 def jump_to(k: int):
-    k = max(0, min(k, len(names_all) - 1)); st.session_state.idx = k
+    k = max(0, min(k, len(names_all)-1)); st.session_state.idx = k
 
 def record_click(name, y_orig, x_orig, overwrite=True):
     if overwrite and name in st.session_state.done_set:
-        st.session_state.df.loc[st.session_state.df["name"] == name, ["click_y", "click_x"]] = [y_orig, x_orig]
+        st.session_state.df.loc[st.session_state.df["name"]==name, ["click_y","click_x"]] = [y_orig, x_orig]
     else:
         st.session_state.df = pd.concat(
-            [st.session_state.df, pd.DataFrame([[name, y_orig, x_orig]], columns=["name", "click_y", "click_x"])],
+            [st.session_state.df, pd.DataFrame({"name": [name], "click_y": [y_orig], "click_x": [x_orig]})],
             ignore_index=True
         )
         st.session_state.done_set.add(name)
     save_df_to_disk()
 
 # ------------------------
-# 사이드바: 진행/툴 + 미리보기 설정
+# 사이드바: 진행/툴 + 원 미리보기 설정
 # ------------------------
 with st.sidebar:
     st.subheader("Progress / Tools")
     total = len(names_all); done = len(st.session_state.done_set); remaining = total - done
     st.write(f"총 **{total}** / 완료 **{done}** / 남음 **{remaining}**")
 
-    # 원 반지름 (px) & 표시 폭 (px)
-    r_px = st.slider("Pointing radius r (px)", 10, 120, 40, step=5,
-                     help="원 중심은 클릭 지점, 반지름 r(px)로 미리보기 표시")
-    disp_w = st.slider("표시 폭 (px)", 400, 1200, 900, step=50,
-                       help="호버 미리보기와 클릭 캡처 이미지를 같은 폭으로 렌더링")
+    # 원 반지름 설정 (px)
+    r_px = st.slider("Pointing radius r (px)", 10, 120, 40, step=5, help="원 중심은 클릭 지점, 반지름 r(px)로 미리보기 표시")
 
     # 점프/이동
-    jump_val = st.slider("Index", 0, total - 1, st.session_state.idx, key="jump_slider")
+    jump_val = st.slider("Index", 0, total-1, st.session_state.idx, key="jump_slider")
     if st.button("Jump"):
         jump_to(jump_val); st.rerun()
     colA, colB = st.columns(2)
@@ -210,13 +132,13 @@ with st.sidebar:
 
     # Reset
     if st.button("처음부터 다시 시작 (Reset CSV)"):
-        st.session_state.df = pd.DataFrame(columns=["name","click_y","click_x"])
+        st.session_state.df = pd.DataFrame({"name": [], "click_y": [], "click_x": []})
         st.session_state.done_set = set()
         save_df_to_disk()
         st.session_state.idx = 0
         st.success("CSV를 초기화했습니다."); st.rerun()
 
-    # 진행 다운로드 / 업로드 병합
+    # 다운로드 / 업로드
     st.download_button("진행 CSV 다운로드", st.session_state.df.to_csv(index=False),
                        file_name=f"clicks_{rater_key}.csv")
     up = st.file_uploader("CSV 업로드(이어하기/병합)", type=["csv"])
@@ -237,7 +159,7 @@ with st.sidebar:
             st.error(f"CSV 처리 중 오류: {e}")
 
 # ------------------------
-# 메인: 호버 미리보기 + 클릭 저장
+# 메인: 이미지 + 클릭 + 원 미리보기
 # ------------------------
 name = current_name()
 img_path = name_to_path[name]
@@ -247,22 +169,15 @@ w, h = img.size
 st.title(f"OCT Click Collector — {rater}")
 st.write(f"현재: **{name}**  ({w}×{h})")
 
-# ① 위: 호버 미리보기(노란 원)
-_ = render_hover_overlay(img, r_px=r_px, disp_w=disp_w,
-                         fill_rgba="rgba(255,215,0,0.2)",
-                         stroke_rgba="rgba(255,215,0,1)", stroke_px=2)
+# 클릭 좌표 (표시 크기 무관 원본 환산)
+click = streamlit_image_coordinates(img, key=f"canvas_{name}", width=None)
 
-st.caption("위 이미지는 마우스 이동에 따라 반투명 원(r)이 실시간 미리보기로 표시됩니다. 아래 이미지에서 클릭을 저장하세요.")
-
-# ② 아래: 실제 클릭 캡처 (동일 표시 폭으로 정렬)
-click = streamlit_image_coordinates(img, key=f"canvas_{name}", width=disp_w)
-
+# 좌표/미리보기
 if click and ("x" in click and "y" in click):
-    # 표시 크기 → 원본 좌표 환산
-    disp_w_eff = click.get("displayed_width", disp_w)
-    disp_h_eff = click.get("displayed_height", int(h * (disp_w / float(w))))
-    scale_x = w / float(disp_w_eff)
-    scale_y = h / float(disp_h_eff)
+    disp_w = click.get("displayed_width", w)
+    disp_h = click.get("displayed_height", h)
+    scale_x = w / float(disp_w)
+    scale_y = h / float(disp_h)
 
     x_disp = float(click["x"]); y_disp = float(click["y"])
     x_orig = int(round(x_disp * scale_x))
@@ -270,12 +185,13 @@ if click and ("x" in click and "y" in click):
 
     st.info(f"📍 클릭(표시 기준): x={int(x_disp)}, y={int(y_disp)}  →  원본: x={x_orig}, y={y_orig} / r={r_px}px")
 
-    # (선택) 저장 전 정적 프리뷰
+    # 🔵 원 미리보기: 클릭 중심에 반투명 원 오버레이
     overlay = img.convert("RGBA")
     draw = ImageDraw.Draw(overlay, "RGBA")
-    draw.ellipse([x_orig - r_px, y_orig - r_px, x_orig + r_px, y_orig + r_px],
-                 outline=(0, 153, 255, 255), width=3, fill=(255, 215, 0, 60))
-    st.image(overlay, caption=f"Preview (click fixed): (x={x_orig}, y={y_orig}), r={r_px}px", width=disp_w)
+    x0, y0 = x_orig - r_px, y_orig - r_px
+    x1, y1 = x_orig + r_px, y_orig + r_px
+    draw.ellipse([x0, y0, x1, y1], outline=(0, 153, 255, 255), width=3, fill=(0, 153, 255, 60))
+    st.image(overlay, caption=f"Preview: circle @ (x={x_orig}, y={y_orig}), r={r_px}px")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -289,7 +205,7 @@ if click and ("x" in click and "y" in click):
         if st.button("이전(미완)으로"):
             move_prev(); st.rerun()
 else:
-    st.write("아래 이미지 위를 클릭하여 좌표를 찍어주세요.")
+    st.write("이미지 위를 클릭하여 좌표를 찍어주세요.")
 
 with st.expander("이미지 목록 / 진행 현황 보기"):
     show_df = pd.DataFrame({"name": names_all, "done": [n in st.session_state.done_set for n in names_all]})
