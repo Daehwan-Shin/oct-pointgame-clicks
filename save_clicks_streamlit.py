@@ -190,7 +190,7 @@ if click and ("x" in click and "y" in click):
     draw = ImageDraw.Draw(overlay, "RGBA")
     x0, y0 = x_orig - r_px, y_orig - r_px
     x1, y1 = x_orig + r_px, y_orig + r_px
-    draw.ellipse([x0, y0, x1, y1], outline=(0, 153, 255, 255), width=3, fill=(0, 153, 255, 60))
+    draw.ellipse([x0, y0, x1, y1], outline=(255, 215, 255, 255), width=3, fill=(0, 153, 255, 40))
     st.image(overlay, caption=f"Preview: circle @ (x={x_orig}, y={y_orig}), r={r_px}px")
 
     col1, col2, col3 = st.columns(3)
