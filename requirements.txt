@@ -1,5 +1,6 @@
 streamlit==1.29.0
 pillow
 pandas
-plotly
-streamlit-plotly-events
+streamlit-image-coordinates==0.1.6
+pandas
+pillow
