@@ -3,72 +3,7 @@ import streamlit as st
 import pandas as pd
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
-
-# 모바일 최적화 CSS
-st.markdown("""
-<style>
-/* 이미지 컨테이너 최적화 - 잘림 방지 */
-.main .block-container {
-    max-width: 100% !important;
-    padding-left: 1rem;
-    padding-right: 1rem;
-}
-
-/* 이미지가 잘리지 않도록 컨테이너 설정 */
-.stImage, .stImage > div {
-    width: 100% !important;
-    max-width: none !important;
-    overflow: visible !important;
-}
-
-.stImage > img {
-    width: 100% !important;
-    height: auto !important;
-    max-width: none !important;
-    object-fit: contain;
-}
-
-/* streamlit-image-coordinates 컴포넌트 최적화 */
-div[data-testid="stImage"] {
-    width: 100% !important;
-    max-width: none !important;
-}
-
-iframe {
-    width: 100% !important;
-    max-width: none !important;
-}
-
-/* 모바일 반응형 설정 */
-@media (max-width: 768px) {
-    .main .block-container {
-        padding-top: 1rem;
-        padding-left: 0.5rem;
-        padding-right: 0.5rem;
-        max-width: 100%;
-    }
-    
-    /* 버튼 크기 조정 */
-    .stButton > button {
-        width: 100% !important;
-        margin-bottom: 0.5rem;
-        font-size: 16px !important;
-        padding: 0.75rem !important;
-    }
-    
-    /* 컬럼 간격 조정 */
-    .row-widget.stHorizontal {
-        gap: 0.5rem;
-    }
-}
-
-/* 터치 친화적 인터페이스 */
-.stButton > button:hover {
-    transform: scale(1.02);
-    transition: transform 0.2s;
-}
-</style>
-""", unsafe_allow_html=True)
+from streamlit_js_eval import streamlit_js_eval
 
 # ------------------------
 # 설정
@@ -119,7 +54,7 @@ names_all = [os.path.splitext(os.path.basename(p))[0] for p in imgs]
 name_to_path = {os.path.splitext(os.path.basename(p))[0]: p for p in imgs}
 
 # ------------------------
-# 상태 초기화
+# 상태 초기화 (평가자별 독립 저장)
 # ------------------------
 if "df" not in st.session_state or st.session_state.get("rater") != rater:
     if os.path.exists(csv_path):
@@ -129,11 +64,11 @@ if "df" not in st.session_state or st.session_state.get("rater") != rater:
 
     st.session_state.done_set = set(st.session_state.df["name"].astype(str).tolist())
 
-    # 다음 시작 index = 완료하지 않은 이미지 중 첫 번째
+    # 다음 시작 index
     remaining_names = [n for n in names_all if n not in st.session_state.done_set]
     st.session_state.idx = (names_all.index(remaining_names[0]) if remaining_names else 0)
 
-    # 현재 rater를 기록해서, rater가 바뀌면 다시 초기화
+    # 현재 rater 기록
     st.session_state.rater = rater
 
 def save_df_to_disk():
@@ -172,7 +107,7 @@ def record_click(name, y_orig, x_orig, overwrite=True):
     save_df_to_disk()
 
 # ------------------------
-# 사이드바: 진행/툴 + 원 반지름 설정
+# 사이드바: 진행/툴
 # ------------------------
 with st.sidebar:
     st.subheader("Progress / Tools")
@@ -237,47 +172,41 @@ with st.sidebar:
             st.error(f"CSV 처리 중 오류: {e}")
 
 # ------------------------
-# 메인: 이미지 + 클릭 → 마지막 클릭만 원 표시
+# 메인: 이미지 + 클릭
 # ------------------------
-# 현재 이미지
 name = current_name()
 img_path = name_to_path[name]
+
+# ✅ 화면 크기 감지
+screen_w = streamlit_js_eval(js_expressions="window.innerWidth", key="WIDTH") or 800
+
+# 표시 크기 결정
+if screen_w < 500:      # 모바일
+    disp_w = int(screen_w * 0.9)
+elif screen_w < 900:    # 태블릿
+    disp_w = 600
+else:                   # 데스크톱
+    disp_w = 800
+
+# 원본 이미지 로드
 img = Image.open(img_path).convert("RGB")
 w, h = img.size
+disp_w = min(disp_w, w)
+disp_h = int(h * (disp_w / w))
+resized_img = img.resize((disp_w, disp_h))
 
-# 모바일 친화적 헤더
-col_header1, col_header2 = st.columns([3, 1])
-with col_header1:
-    st.title(f"OCT Click Collector — {rater}")
-with col_header2:
-    st.metric("진행률", f"{len(st.session_state.done_set)}/{len(names_all)}")
-
-st.write(f"📋 현재: **{name}**")
-st.write(f"📐 크기: **{w}×{h}** pixels")
-
-# 원본으로 시작
-display_img = img
-
-# 이미지 전체가 보이도록 너비 설정 (잘림 방지)
-# 모바일과 데스크톱 모두에서 이미지가 완전히 표시되도록 함
-st.markdown("### 🖼️ 분석할 이미지")
-st.markdown("*이미지 위를 터치/클릭하여 분석 지점을 선택하세요*")
-
-# 전체 너비로 이미지 표시 (잘림 방지)
-click = streamlit_image_coordinates(display_img, key=f"canvas_{name}", width=None)
+# 좌표 클릭 입력
+click = streamlit_image_coordinates(resized_img, key=f"canvas_{name}", width=disp_w)
 
 if click and ("x" in click and "y" in click):
-    disp_w = click.get("displayed_width", w)
-    disp_h = click.get("displayed_height", h)
     scale_x = w / float(disp_w)
     scale_y = h / float(disp_h)
-
     x_orig = int(round(click["x"] * scale_x))
     y_orig = int(round(click["y"] * scale_y))
 
-    st.info(f"📍 클릭 좌표: {x_orig}, {y_orig} / r={r_px}px")
+    st.info(f"📍 원본 좌표: {x_orig}, {y_orig} / r={r_px}px")
 
-    # 오버레이 합성
+    # 오버레이
     overlay = img.convert("RGBA")
     circle_layer = Image.new("RGBA", overlay.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(circle_layer, "RGBA")
@@ -287,42 +216,23 @@ if click and ("x" in click and "y" in click):
         width=3,
         fill=(255, 255, 0, 80)
     )
-    display_img = Image.alpha_composite(overlay, circle_layer)
+    overlayed = Image.alpha_composite(overlay, circle_layer)
+    st.image(overlayed, caption="클릭 영역 표시", use_container_width=True)
 
-    # 클릭된 overlay 이미지를 다시 표시 (같은 자리)
-    st.image(display_img, caption="클릭 영역 표시")
-
-    # 모바일 친화적 버튼 레이아웃
-    st.markdown("---")
-    
-    # 기본 액션 버튼들 (더 큰 버튼으로)
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("✅ 저장 & 다음", type="primary", help="현재 클릭을 저장하고 다음 이미지로 이동"):
+        if st.button("저장 & 다음", type="primary"):
             record_click(name, y_orig, x_orig, overwrite=True)
             move_next(); st.rerun()
     with col2:
-        if st.button("⏭️ 건너뛰기", help="현재 이미지를 건너뛰고 다음으로 이동"):
+        if st.button("건너뛰기"):
             move_next(); st.rerun()
-    
-    # 추가 네비게이션
-    if st.button("⬅️ 이전(미완)으로", help="이전 미완성 이미지로 이동"):
-        move_prev(); st.rerun()
-else:
-    st.info("👆 이미지 위를 터치/클릭하여 분석할 지점을 선택해주세요.")
-    
-    # 클릭 전에도 네비게이션 제공
-    col_nav1, col_nav2 = st.columns(2)
-    with col_nav1:
-        if st.button("⏭️ 이 이미지 건너뛰기"):
-            move_next(); st.rerun()
-    with col_nav2:
-        if st.button("⬅️ 이전 이미지로"):
+    with col3:
+        if st.button("이전(미완)으로"):
             move_prev(); st.rerun()
+else:
+    st.info("👆 이미지를 클릭하여 좌표를 찍어주세요.")
 
 with st.expander("이미지 목록 / 진행 현황 보기"):
-    show_df = pd.DataFrame({
-        "name": names_all,
-        "done": [n in st.session_state.done_set for n in names_all]
-    })
+    show_df = pd.DataFrame({"name": names_all, "done": [n in st.session_state.done_set for n in names_all]})
     st.dataframe(show_df)
