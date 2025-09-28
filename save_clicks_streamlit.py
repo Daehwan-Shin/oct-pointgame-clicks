@@ -4,6 +4,64 @@ import pandas as pd
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 
+# 모바일 최적화 CSS
+st.markdown("""
+<style>
+/* 모바일 반응형 설정 */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-top: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+        max-width: 100%;
+    }
+    
+    /* 이미지 컨테이너 최적화 */
+    .stImage {
+        max-width: 100% !important;
+    }
+    
+    .stImage > img {
+        width: 100% !important;
+        height: auto !important;
+        max-width: 100% !important;
+        object-fit: contain;
+    }
+    
+    /* 버튼 크기 조정 */
+    .stButton > button {
+        width: 100% !important;
+        margin-bottom: 0.5rem;
+        font-size: 16px !important;
+        padding: 0.75rem !important;
+    }
+    
+    /* 컬럼 간격 조정 */
+    .row-widget.stHorizontal {
+        gap: 0.5rem;
+    }
+    
+    /* 사이드바 최적화 */
+    .css-1d391kg {
+        width: 100% !important;
+    }
+}
+
+/* 데스크톱에서 이미지 최대 너비 제한 */
+@media (min-width: 769px) {
+    .stImage {
+        max-width: 800px !important;
+    }
+}
+
+/* 터치 친화적 인터페이스 */
+.stButton > button:hover {
+    transform: scale(1.02);
+    transition: transform 0.2s;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ------------------------
 # 설정
 # ------------------------
@@ -179,14 +237,28 @@ img_path = name_to_path[name]
 img = Image.open(img_path).convert("RGB")
 w, h = img.size
 
-st.title(f"OCT Click Collector — {rater}")
-st.write(f"현재: **{name}**  ({w}×{h})")
+# 모바일 친화적 헤더
+col_header1, col_header2 = st.columns([3, 1])
+with col_header1:
+    st.title(f"OCT Click Collector — {rater}")
+with col_header2:
+    st.metric("진행률", f"{len(st.session_state.done_set)}/{len(names_all)}")
+
+st.write(f"📋 현재: **{name}**")
+st.write(f"📐 크기: **{w}×{h}** pixels")
 
 # 원본으로 시작
 display_img = img
 
-# 클릭 좌표 읽기 (이전 프레임에서 얻어옴)
-click = streamlit_image_coordinates(display_img, key=f"canvas_{name}", width=None)
+# 모바일 최적화된 이미지 표시 크기 계산
+max_width = 800  # 데스크톱 최대 너비
+if w > max_width:
+    display_width = max_width
+else:
+    display_width = w
+
+# 클릭 좌표 읽기 (모바일 최적화된 크기로)
+click = streamlit_image_coordinates(display_img, key=f"canvas_{name}", width=display_width)
 
 if click and ("x" in click and "y" in click):
     disp_w = click.get("displayed_width", w)
@@ -214,19 +286,33 @@ if click and ("x" in click and "y" in click):
     # 클릭된 overlay 이미지를 다시 표시 (같은 자리)
     st.image(display_img, caption="클릭 영역 표시")
 
-    col1, col2, col3 = st.columns(3)
+    # 모바일 친화적 버튼 레이아웃
+    st.markdown("---")
+    
+    # 기본 액션 버튼들 (더 큰 버튼으로)
+    col1, col2 = st.columns(2)
     with col1:
-        if st.button("저장 & 다음", type="primary"):
+        if st.button("✅ 저장 & 다음", type="primary", help="현재 클릭을 저장하고 다음 이미지로 이동"):
             record_click(name, y_orig, x_orig, overwrite=True)
             move_next(); st.rerun()
     with col2:
-        if st.button("건너뛰기"):
+        if st.button("⏭️ 건너뛰기", help="현재 이미지를 건너뛰고 다음으로 이동"):
             move_next(); st.rerun()
-    with col3:
-        if st.button("이전(미완)으로"):
-            move_prev(); st.rerun()
+    
+    # 추가 네비게이션
+    if st.button("⬅️ 이전(미완)으로", help="이전 미완성 이미지로 이동"):
+        move_prev(); st.rerun()
 else:
-    st.write("이미지 위를 클릭하여 좌표를 찍어주세요.")
+    st.info("👆 이미지 위를 터치/클릭하여 분석할 지점을 선택해주세요.")
+    
+    # 클릭 전에도 네비게이션 제공
+    col_nav1, col_nav2 = st.columns(2)
+    with col_nav1:
+        if st.button("⏭️ 이 이미지 건너뛰기"):
+            move_next(); st.rerun()
+    with col_nav2:
+        if st.button("⬅️ 이전 이미지로"):
+            move_prev(); st.rerun()
 
 with st.expander("이미지 목록 / 진행 현황 보기"):
     show_df = pd.DataFrame({
