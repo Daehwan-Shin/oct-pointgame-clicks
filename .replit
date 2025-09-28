@@ -1,4 +1,4 @@
-run = "streamlit run save_clicks_streamlit.py --server.port 3000 --server.address 0.0.0.0"
+run = "streamlit run save_clicks_streamlit.py --server.port 5000 --server.address 0.0.0.0"
 modules = ["python-3.11"]
 
 [nix]
@@ -34,12 +34,12 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 40421
-externalPort = 3001
-
-[[ports]]
 localPort = 41983
 externalPort = 3000
 
 [agent]
 expertMode = true
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["streamlit", "run", "save_clicks_streamlit.py", "--server.port", "5000", "--server.address", "0.0.0.0"]
