@@ -1,4 +1,4 @@
-run = "streamlit run save_clicks_streamlit.py --server.port 5000 --server.address 0.0.0.0"
+run = "streamlit run save_clicks_streamlit.py --server.port 5000 --server.address 0.0.0.0 --browser.serverAddress='0.0.0.0' --browser.gatherUsageStats false"
 modules = ["python-3.11"]
 
 [nix]
