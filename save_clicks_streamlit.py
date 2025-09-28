@@ -7,25 +7,45 @@ from streamlit_image_coordinates import streamlit_image_coordinates
 # 모바일 최적화 CSS
 st.markdown("""
 <style>
+/* 이미지 컨테이너 최적화 - 잘림 방지 */
+.main .block-container {
+    max-width: 100% !important;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+/* 이미지가 잘리지 않도록 컨테이너 설정 */
+.stImage, .stImage > div {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+}
+
+.stImage > img {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    object-fit: contain;
+}
+
+/* streamlit-image-coordinates 컴포넌트 최적화 */
+div[data-testid="stImage"] {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+iframe {
+    width: 100% !important;
+    max-width: none !important;
+}
+
 /* 모바일 반응형 설정 */
 @media (max-width: 768px) {
     .main .block-container {
         padding-top: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
         max-width: 100%;
-    }
-    
-    /* 이미지 컨테이너 최적화 */
-    .stImage {
-        max-width: 100% !important;
-    }
-    
-    .stImage > img {
-        width: 100% !important;
-        height: auto !important;
-        max-width: 100% !important;
-        object-fit: contain;
     }
     
     /* 버튼 크기 조정 */
@@ -39,18 +59,6 @@ st.markdown("""
     /* 컬럼 간격 조정 */
     .row-widget.stHorizontal {
         gap: 0.5rem;
-    }
-    
-    /* 사이드바 최적화 */
-    .css-1d391kg {
-        width: 100% !important;
-    }
-}
-
-/* 데스크톱에서 이미지 최대 너비 제한 */
-@media (min-width: 769px) {
-    .stImage {
-        max-width: 800px !important;
     }
 }
 
@@ -250,15 +258,13 @@ st.write(f"📐 크기: **{w}×{h}** pixels")
 # 원본으로 시작
 display_img = img
 
-# 모바일 최적화된 이미지 표시 크기 계산
-max_width = 800  # 데스크톱 최대 너비
-if w > max_width:
-    display_width = max_width
-else:
-    display_width = w
+# 이미지 전체가 보이도록 너비 설정 (잘림 방지)
+# 모바일과 데스크톱 모두에서 이미지가 완전히 표시되도록 함
+st.markdown("### 🖼️ 분석할 이미지")
+st.markdown("*이미지 위를 터치/클릭하여 분석 지점을 선택하세요*")
 
-# 클릭 좌표 읽기 (모바일 최적화된 크기로)
-click = streamlit_image_coordinates(display_img, key=f"canvas_{name}", width=display_width)
+# 전체 너비로 이미지 표시 (잘림 방지)
+click = streamlit_image_coordinates(display_img, key=f"canvas_{name}", width=None)
 
 if click and ("x" in click and "y" in click):
     disp_w = click.get("displayed_width", w)
