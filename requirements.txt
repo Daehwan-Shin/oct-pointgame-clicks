@@ -4,4 +4,3 @@ pandas
 streamlit-image-coordinates==0.1.6
 pandas
 pillow
-streamlit-js-eval
