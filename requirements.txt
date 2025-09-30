@@ -7,3 +7,4 @@ pillow
 supabase
 postgrest
 gotrue
+opencv-python-headless

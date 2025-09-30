@@ -4,7 +4,12 @@ import pandas as pd
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 from supabase import create_client, Client
+import numpy as np
+import cv2
 
+#설정 상수
+CAM_DN_DIR = "cams_dn"
+CAM_EF_DIR = "cams_ef"
 # ================================
 # 1. Supabase 연결 설정
 # ================================
@@ -41,6 +46,22 @@ with st.sidebar:
         index=(DOCTORS.index(pref_label) if pref_label in DOCTORS else 0)
     )
     st.caption("선택한 평가자에 따라 별도로 DB에 저장됩니다.")
+
+#layercam불러오기 헬
+def load_cam_npy(path: str) -> np.ndarray:
+    cam = np.load(path)
+    cam = np.squeeze(cam)
+    if cam.ndim != 2:
+        cam = cam[..., 0]
+    return cam.astype(np.float32)
+
+def cam_to_pil(cam: np.ndarray, w: int, h: int) -> Image.Image:
+    cam_resized = cv2.resize(cam, (w, h), interpolation=cv2.INTER_LINEAR)
+    mn, mx = cam_resized.min(), cam_resized.max()
+    cam_norm = np.zeros_like(cam_resized, dtype=np.float32) if mx - mn < 1e-8 else (cam_resized - mn) / (mx - mn)
+    heatmap = cv2.applyColorMap(np.uint8(255 * cam_norm), cv2.COLORMAP_JET)
+    heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    return Image.fromarray(heatmap_rgb)
 
 # ================================
 # 3. Supabase 헬퍼 함수
@@ -221,7 +242,30 @@ if click and ("x" in click and "y" in click):
     )
     display_img = Image.alpha_composite(overlay, circle_layer)
 
-    st.image(display_img, caption="클릭 영역 표시")
+    # --- 기존의 단일 이미지 표시를 3열 표시로 교체 ---
+    # st.image(display_img, caption="클릭 영역 표시")  # ← 이 줄 지우고 아래로 교체
+
+    # 현재 이미지의 base name으로 CAM 경로 구성
+    base = os.path.splitext(os.path.basename(img_path))[0]
+    cam_dn_path = os.path.join(CAM_DN_DIR, f"{base}.npy")
+    cam_ef_path = os.path.join(CAM_EF_DIR, f"{base}.npy")
+
+    # CAM 로드 (없어도 에러 없이 넘어가도록)
+    dn_img = ef_img = None
+    if os.path.exists(cam_dn_path):
+        cam_dn = load_cam_npy(cam_dn_path)
+        dn_img = cam_to_pil(cam_dn, w, h)    # ← 원 안 얹음 (참고용)
+    if os.path.exists(cam_ef_path):
+        cam_ef = load_cam_npy(cam_ef_path)
+        ef_img = cam_to_pil(cam_ef, w, h)    # ← 원 안 얹음 (참고용)
+
+    # 3개 나란히 출력: 원본(+원), DenseNet CAM, EfficientNet CAM
+    col1, col2, col3 = st.columns(3)
+    col1.image(display_img, caption="원본 + 클릭", use_column_width=True)
+    col2.image(dn_img if dn_img is not None else Image.new("RGB", (w, h), (32,32,32)),
+               caption="DenseNet201 CAM (참고)", use_column_width=True)
+    col3.image(ef_img if ef_img is not None else Image.new("RGB", (w, h), (32,32,32)),
+               caption="EfficientNet-B4 CAM (참고)", use_column_width=True)
 
     st.markdown("---")
     col1, col2 = st.columns(2)
